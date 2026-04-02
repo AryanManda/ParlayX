@@ -136,7 +136,37 @@ def fetch_upcoming_games(sport_key: str, days_ahead: int = 3) -> list[dict]:
     for i in range(days_ahead + 1):
         date = (datetime.utcnow() + timedelta(days=i)).strftime("%Y%m%d")
         games = fetch_espn_scoreboard(sport_key, date)
-        all_games.extend([g for g in games if g["status"] in ("scheduled", "pre")])
+        all_games.extend([g for g in games if g["status"] in ("scheduled", "pre", "scheduled")])
+
+    # Fallback: pull game list from Odds API when ESPN returns nothing
+    if not all_games and ODDS_API_KEY:
+        from config import ESPN_SPORTS
+        odds_sport_map = {
+            "NBA": "basketball_nba", "NFL": "americanfootball_nfl",
+            "MLB": "baseball_mlb", "NHL": "icehockey_nhl",
+            "NCAAB": "basketball_ncaab", "NCAAF": "americanfootball_ncaaf",
+        }
+        odds_key = odds_sport_map.get(sport_key, "")
+        if odds_key:
+            odds_events = fetch_game_odds(odds_key)
+            for ev in odds_events:
+                ct = ev.get("commence_time", "")
+                try:
+                    gd = datetime.fromisoformat(ct.replace("Z", "+00:00"))
+                except Exception:
+                    gd = datetime.utcnow()
+                all_games.append({
+                    "id": ev.get("id", ""),
+                    "sport": sport_key,
+                    "league": sport_key,
+                    "home_team": ev.get("home_team", ""),
+                    "away_team": ev.get("away_team", ""),
+                    "home_score": 0.0, "away_score": 0.0,
+                    "game_date": gd,
+                    "status": "scheduled",
+                    "venue": "", "home_record": "", "away_record": "",
+                })
+
     return all_games
 
 
@@ -403,22 +433,33 @@ def get_mock_odds(sport: str, home_team: str, away_team: str) -> dict:
     import random
     rng = random.Random(hash(f"{sport}{home_team}{away_team}"))
 
-    # Home team moneyline (slight home advantage)
-    home_ml = rng.randint(-150, -105)
-    # Derive away from home (with juice)
-    away_ml = int(100 / (1 + 1 / abs(home_ml)) * 100) if home_ml < 0 else rng.randint(100, 140)
+    # Home team moneyline (home team is slight favourite: -120 to -160)
+    home_ml = rng.randint(-160, -105)
 
-    spread = round(rng.uniform(-7.5, 7.5) * 2) / 2
+    # Convert home_ml to implied probability, derive away with ~5% juice
+    if home_ml < 0:
+        home_implied = abs(home_ml) / (abs(home_ml) + 100)
+    else:
+        home_implied = 100 / (home_ml + 100)
+    away_implied = 1 - home_implied + 0.05  # add juice
+    away_implied = min(away_implied, 0.95)
+    # Convert away implied back to American odds
+    if away_implied > 0.5:
+        away_ml = -int(round(away_implied / (1 - away_implied) * 100))
+    else:
+        away_ml = int(round((1 - away_implied) / away_implied * 100))
+
+    spread = round(rng.uniform(-7.0, -1.0), 1)  # home is favoured
     total = round(rng.uniform(195, 235) if sport == "NBA"
                   else rng.uniform(40, 50) if sport == "NFL"
                   else rng.uniform(6, 10) if sport == "MLB"
-                  else rng.uniform(5, 7.5), 1)
+                  else rng.uniform(5.0, 7.0), 1)
 
     return {
         "home_ml": home_ml,
         "away_ml": away_ml,
-        "home_spread": -spread,
-        "away_spread": spread,
+        "home_spread": spread,
+        "away_spread": -spread,
         "spread_odds": -110,
         "total_line": total,
         "over_odds": -110,

@@ -5,7 +5,7 @@ import os
 from pathlib import Path
 from dotenv import load_dotenv
 
-load_dotenv()
+load_dotenv(dotenv_path=Path(__file__).parent / ".env")
 
 BASE_DIR = Path(__file__).parent
 DATA_DIR = BASE_DIR / "data"
@@ -44,14 +44,14 @@ NFL_DATA_SEASONS = [2022, 2023, 2024]
 
 # ML Model settings
 MODEL_CONFIDENCE_THRESHOLD = 0.55   # Min confidence to consider a bet
-EV_THRESHOLD = 0.03                  # Min +EV (3%) to flag as +EV bet
+EV_THRESHOLD = 0.01                  # Min +EV (1%) to flag as +EV bet
 KELLY_FRACTION = 0.25                # Fractional Kelly (conservative)
 MAX_BANKROLL_PCT = 0.02              # Max 2% per parlay
 
 # Parlay settings
 MIN_PARLAY_LEGS = 2
 MAX_PARLAY_LEGS = 5
-MIN_LEG_PROBABILITY = 0.52           # Min win prob per leg
+MIN_LEG_PROBABILITY = 0.50           # Min win prob per leg
 MAX_CORRELATION = 0.3                # Max allowed correlation between legs
 SIMULATIONS = 100_000                # Monte Carlo simulations
 

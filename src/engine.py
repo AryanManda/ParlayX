@@ -95,6 +95,47 @@ def _default_team_stats(sport: str, team: str, elo: float = 1500.0) -> dict:
     }
 
 
+PLACEHOLDER_GAMES = {
+    "NBA": [
+        ("Los Angeles Lakers", "Boston Celtics"),
+        ("Golden State Warriors", "Phoenix Suns"),
+        ("Milwaukee Bucks", "Miami Heat"),
+        ("Denver Nuggets", "Dallas Mavericks"),
+        ("Philadelphia 76ers", "Brooklyn Nets"),
+        ("Chicago Bulls", "Cleveland Cavaliers"),
+    ],
+    "NFL": [
+        ("Kansas City Chiefs", "Buffalo Bills"),
+        ("San Francisco 49ers", "Dallas Cowboys"),
+        ("Philadelphia Eagles", "New York Giants"),
+        ("Baltimore Ravens", "Cincinnati Bengals"),
+    ],
+    "MLB": [
+        ("Los Angeles Dodgers", "San Francisco Giants"),
+        ("New York Yankees", "Boston Red Sox"),
+        ("Houston Astros", "Texas Rangers"),
+        ("Atlanta Braves", "New York Mets"),
+        ("Chicago Cubs", "St. Louis Cardinals"),
+    ],
+    "NHL": [
+        ("Colorado Avalanche", "Dallas Stars"),
+        ("Boston Bruins", "Toronto Maple Leafs"),
+        ("Tampa Bay Lightning", "Florida Panthers"),
+        ("Vegas Golden Knights", "Edmonton Oilers"),
+    ],
+}
+
+
+def _get_placeholder_games(sport: str) -> list[dict]:
+    """Return placeholder matchups when all APIs are unavailable."""
+    pairs = PLACEHOLDER_GAMES.get(sport, [])
+    return [
+        {"id": f"{h}_{a}", "home_team": h, "away_team": a,
+         "game_date": datetime.utcnow(), "status": "scheduled"}
+        for h, a in pairs
+    ]
+
+
 # ─── Core analysis pipeline ───────────────────────────────────────────────────
 
 def analyze_game(
@@ -142,24 +183,54 @@ def analyze_game(
     away_prob = 1 - ml_pred.probability
 
     # Get odds (real or mock)
+    mock = get_mock_odds(sport, home, away)
+    home_ml = mock["home_ml"]
+    away_ml = mock["away_ml"]
+    spread = mock.get("home_spread", -3.0)
+    spread_odds = mock.get("spread_odds", -110)
+    total_line = mock.get("total_line", 220.5)
+    over_odds = mock.get("over_odds", -110)
+
     if bookmaker_odds:
-        # Find best available moneyline odds
-        home_odds_list = []
-        away_odds_list = []
+        # Parse real odds — best price across all bookmakers
+        home_odds_list, away_odds_list = [], []
+        home_spread_list, spread_odds_list = [], []
+        total_list, over_odds_list = [], []
+
+        def _decimal_val(x):
+            return (x / 100 + 1) if x > 0 else (100 / abs(x) + 1)
+
         for bm in bookmaker_odds:
-            h2h = bm.get("markets", {}).get("h2h", {})
+            mkts = bm.get("markets", {})
+            # h2h (moneyline)
+            h2h = mkts.get("h2h", {})
             if home in h2h:
                 home_odds_list.append(h2h[home]["price"])
             if away in h2h:
                 away_odds_list.append(h2h[away]["price"])
-        home_ml = max(home_odds_list, default=-110,
-                      key=lambda x: (x/100 + 1 if x > 0 else 100/abs(x) + 1))
-        away_ml = max(away_odds_list, default=110,
-                      key=lambda x: (x/100 + 1 if x > 0 else 100/abs(x) + 1))
-    else:
-        mock = get_mock_odds(sport, home, away)
-        home_ml = mock["home_ml"]
-        away_ml = mock["away_ml"]
+            # spreads
+            spreads = mkts.get("spreads", {})
+            if home in spreads:
+                home_spread_list.append(spreads[home].get("point", spread))
+                spread_odds_list.append(spreads[home]["price"])
+            # totals
+            totals = mkts.get("totals", {})
+            if "Over" in totals:
+                total_list.append(totals["Over"].get("point", total_line))
+                over_odds_list.append(totals["Over"]["price"])
+
+        if home_odds_list:
+            home_ml = max(home_odds_list, key=_decimal_val)
+        if away_odds_list:
+            away_ml = max(away_odds_list, key=_decimal_val)
+        if home_spread_list:
+            spread = home_spread_list[0]
+        if spread_odds_list:
+            spread_odds = max(spread_odds_list, key=_decimal_val)
+        if total_list:
+            total_line = total_list[0]
+        if over_odds_list:
+            over_odds = max(over_odds_list, key=_decimal_val)
 
     # Evaluate home moneyline
     evaluations.append(evaluate_bet(
@@ -180,8 +251,6 @@ def analyze_game(
 
     # Evaluate spreads
     spread_model = get_model(sport, "spread")
-    mock = get_mock_odds(sport, home, away)
-    spread = mock.get("home_spread", -3.0)
     home_cover_pred = spread_model.predict_spread(features, spread)
 
     evaluations.append(evaluate_bet(
@@ -189,13 +258,12 @@ def analyze_game(
         outcome="home_cover", description=f"{home} {spread:+.1f}",
         model_prob=home_cover_pred.probability,
         model_confidence=home_cover_pred.confidence,
-        american_odds=mock.get("spread_odds", -110),
+        american_odds=spread_odds,
         teams=teams_str, game_date=game_date,
     ))
 
     # Evaluate totals
     total_model = get_model(sport, "totals")
-    total_line = mock.get("total_line", 220.5)
     total_pred = total_model.predict_total(features, total_line)
 
     evaluations.append(evaluate_bet(
@@ -204,7 +272,7 @@ def analyze_game(
         description=f"{'Over' if total_pred.outcome == 'over' else 'Under'} {total_line}",
         model_prob=total_pred.probability,
         model_confidence=total_pred.confidence,
-        american_odds=mock.get("over_odds", -110),
+        american_odds=over_odds,
         teams=teams_str, game_date=game_date,
     ))
 
@@ -242,11 +310,42 @@ def scan_today(
             today = datetime.utcnow().strftime("%Y%m%d")
             games = fetch_espn_scoreboard(sport, today)
 
-        _progress(f"[{sport}] Found {len(games)} game(s) — analyzing...")
+        # Fetch real odds once per sport (keyed by team name pair)
+        odds_key = SPORT_ODDS_KEYS.get(sport, "")
+        raw_odds = fetch_game_odds(odds_key) if odds_key else []
+        # Build lookup: (home_team, away_team) → bookmakers list
+        odds_lookup: dict[tuple, list] = {}
+        for og in raw_odds:
+            h = og.get("home_team", "")
+            a = og.get("away_team", "")
+            odds_lookup[(h, a)] = og.get("bookmakers", [])
+
+        # If still no games, use placeholder matchups so model can still run
+        if not games and not raw_odds:
+            games = _get_placeholder_games(sport)
+            _progress(f"[{sport}] No live data — using placeholder matchups")
+        elif not games and raw_odds:
+            # Already handled in fetcher via fallback, but raw_odds have the game list
+            games = [{"id": og["id"], "home_team": og["home_team"],
+                      "away_team": og["away_team"], "game_date": datetime.utcnow(),
+                      "status": "scheduled"} for og in raw_odds]
+
+        _progress(f"[{sport}] Found {len(games)} game(s), {len(raw_odds)} odds events — analyzing...")
         games_scanned += len(games)
 
         for game in games[:10]:
-            evals = analyze_game(sport, game)
+            # Try to match this game to real odds by team name
+            gh = game.get("home_team", "")
+            ga = game.get("away_team", "")
+            bookmaker_odds = odds_lookup.get((gh, ga))
+            if not bookmaker_odds:
+                # Fuzzy fallback: check if team name appears in odds team name
+                for (oh, oa), bms in odds_lookup.items():
+                    if (gh.split()[-1] in oh or oh.split()[-1] in gh) and \
+                       (ga.split()[-1] in oa or oa.split()[-1] in ga):
+                        bookmaker_odds = bms
+                        break
+            evals = analyze_game(sport, game, bookmaker_odds)
             all_evals.extend(evals)
 
     # Screen for +EV bets

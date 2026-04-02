@@ -102,7 +102,12 @@ class EloTracker:
         self.ratings: dict[str, float] = {}
 
     def get(self, team: str) -> float:
-        return self.ratings.get(team, self.initial_elo)
+        if team not in self.ratings:
+            import hashlib
+            h = int(hashlib.md5(team.encode()).hexdigest()[:8], 16)
+            # Spread teams across 1380–1620 deterministically from name
+            self.ratings[team] = 1380 + (h % 241)
+        return self.ratings[team]
 
     def regress_to_mean(self):
         """Apply mean reversion at season start."""

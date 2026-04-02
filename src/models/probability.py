@@ -124,10 +124,13 @@ class WinProbabilityModel(ParlayModel):
         print(f"[{self.sport}] Model trained: CV accuracy = {self.training_accuracy:.3f}")
 
     def predict_proba(self, X: np.ndarray) -> np.ndarray:
-        X_scaled = self.scaler.transform(X)
-
         if not self.is_trained or not self.base_models:
             return np.column_stack([1 - X[:, 1], X[:, 1]])  # use ELO prob directly
+
+        try:
+            X_scaled = self.scaler.transform(X)
+        except Exception:
+            return np.column_stack([1 - X[:, 1], X[:, 1]])
 
         if len(self.base_models) == 1:
             return self.base_models[0][1].predict_proba(X_scaled)
@@ -251,10 +254,13 @@ class TotalModel(ParlayModel):
         self.is_trained = True
 
     def predict_proba(self, X: np.ndarray) -> np.ndarray:
-        X_scaled = self.scaler.transform(X) if self.is_trained else X
-        if self.model and self.is_trained:
+        if not self.is_trained or not self.model:
+            return np.column_stack([np.full(len(X), 0.5), np.full(len(X), 0.5)])
+        try:
+            X_scaled = self.scaler.transform(X)
             return self.model.predict_proba(X_scaled)
-        return np.column_stack([np.full(len(X), 0.5), np.full(len(X), 0.5)])
+        except Exception:
+            return np.column_stack([np.full(len(X), 0.5), np.full(len(X), 0.5)])
 
     def predict_total(self, features: GameFeatures, total_line: float) -> Prediction:
         """Predict over/under for a game total."""
