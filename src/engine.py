@@ -187,6 +187,7 @@ def scan_today(
     ai_analysis: bool = True,
     bankroll: float = 1000.0,
     n_parlay_legs: int = 3,
+    progress_cb=None,
 ) -> dict:
     """
     Full daily scan: fetch today's games, find +EV bets, build best parlays.
@@ -200,41 +201,45 @@ def scan_today(
     print(f"  ParlayX Daily Scan — {datetime.now().strftime('%Y-%m-%d %H:%M')}")
     print(f"{'='*60}")
 
+    def _progress(msg: str):
+        print(msg)
+        if progress_cb:
+            progress_cb(msg)
+
     for sport in sports:
-        print(f"\n[{sport}] Fetching upcoming games...")
+        _progress(f"[{sport}] Fetching upcoming games...")
         games = fetch_upcoming_games(sport, days_ahead=1)
         if not games:
-            # Try today's scoreboard as fallback
             today = datetime.utcnow().strftime("%Y%m%d")
             games = fetch_espn_scoreboard(sport, today)
 
-        print(f"[{sport}] Found {len(games)} game(s).")
+        _progress(f"[{sport}] Found {len(games)} game(s) — analyzing...")
         games_scanned += len(games)
 
-        for game in games[:10]:  # Limit to 10 games per sport
+        for game in games[:10]:
             evals = analyze_game(sport, game)
             all_evals.extend(evals)
 
     # Screen for +EV bets
     ev_bets = screen_bets(all_evals)
-    print(f"\n[SCREEN] Found {len(ev_bets)} +EV bets from {len(all_evals)} evaluated.")
+    _progress(f"Screening complete — {len(ev_bets)} +EV bets from {len(all_evals)} evaluated")
 
     # Build optimal parlays
     best_parlays: list[ParlaySlip] = []
     if len(ev_bets) >= MIN_PARLAY_LEGS:
-        print(f"\n[PARLAY] Building optimal {n_parlay_legs}-leg parlays...")
+        _progress(f"Building optimal {n_parlay_legs}-leg parlays...")
         best_parlays = find_best_parlays(
             ev_bets,
             n_legs_range=range(MIN_PARLAY_LEGS, min(n_parlay_legs + 1, MAX_PARLAY_LEGS + 1)),
             top_n=3,
             bankroll=bankroll,
         )
-        print(f"[PARLAY] Built {len(best_parlays)} parlay option(s).")
+        _progress(f"Built {len(best_parlays)} parlay option(s)")
 
     # AI analysis on best parlay
     ai_result = {}
     if ai_analysis and best_parlays:
-        print("\n[AI] Running Claude analysis on top parlay...")
+        _progress("Running Claude AI analysis on top parlay...")
         advisor = get_advisor()
         ai_result = advisor.analyze_parlay(best_parlays[0])
         if best_parlays[0]:

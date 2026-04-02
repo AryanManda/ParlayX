@@ -155,8 +155,12 @@ async def run_scan(req: ScanRequest, background_tasks: BackgroundTasks):
 
 async def _do_scan(req: ScanRequest):
     _state["scan_running"] = True
-    _state["scan_progress"] = "Fetching games..."
+    _state["scan_progress"] = "Starting scan..."
     _state["scan_sports"] = req.sports
+
+    def _progress(msg: str):
+        _state["scan_progress"] = msg
+
     try:
         loop = asyncio.get_event_loop()
         results = await loop.run_in_executor(None, lambda: scan_today(
@@ -164,6 +168,7 @@ async def _do_scan(req: ScanRequest):
             ai_analysis=req.ai_analysis,
             bankroll=req.bankroll,
             n_parlay_legs=req.legs,
+            progress_cb=_progress,
         ))
         _state["ev_bets"] = [bet_to_dict(b) for b in results["top_ev_bets"]]
         _state["parlays"] = [parlay_to_dict(p) for p in results["best_parlays"]]

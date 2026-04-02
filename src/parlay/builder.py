@@ -125,7 +125,7 @@ def _grade_parlay(
 def build_parlay(
     legs: list[BetEvaluation],
     bankroll: float = 1000.0,
-    n_sims: int = 100_000,
+    n_sims: int = 20_000,
 ) -> ParlaySlip:
     """
     Build and score a parlay from a list of bet legs.
@@ -217,7 +217,7 @@ def find_best_parlays(
                 break
             combos_tried += 1
             try:
-                slip = build_parlay(list(combo), bankroll=bankroll, n_sims=50_000)
+                slip = build_parlay(list(combo), bankroll=bankroll, n_sims=5_000)
                 if slip.ev_pct > -5:  # Only keep non-terrible parlays
                     all_slips.append(slip)
             except Exception:
