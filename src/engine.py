@@ -48,20 +48,49 @@ def get_elo(sport: str) -> EloTracker:
 
 def _default_team_stats(sport: str, team: str, elo: float = 1500.0) -> dict:
     """Default stats when real data isn't available."""
+    import hashlib
+    # Seed from team name so same team always gets same stats (deterministic)
+    seed = int(hashlib.md5(team.encode()).hexdigest()[:8], 16) % 1000
+    rng = __import__('random').Random(seed)
+
+    wins = rng.randint(14, 36)
+    losses = 40 - wins
+    # Scale offensive/defensive stats with win rate
+    win_rate = wins / 40
+
     defaults = {
-        "NBA": {"points_per_game": 112, "points_allowed_per_game": 112,
-                "field_goal_pct": 0.46, "three_point_pct": 0.36},
-        "NFL": {"points_per_game": 23, "points_allowed_per_game": 23,
-                "yards_per_game": 350, "yards_allowed_per_game": 350},
-        "MLB": {"runs_per_game": 4.5, "runs_allowed_per_game": 4.5, "batting_avg": 0.250},
-        "NHL": {"goals_for": 3.1, "goals_against": 3.1, "pp_pct": 0.20, "pk_pct": 0.80},
+        "NBA": {
+            "points_per_game": 104 + win_rate * 16,
+            "points_allowed_per_game": 116 - win_rate * 16,
+            "field_goal_pct": 0.43 + win_rate * 0.06,
+            "three_point_pct": 0.33 + win_rate * 0.06,
+        },
+        "NFL": {
+            "points_per_game": 18 + win_rate * 12,
+            "points_allowed_per_game": 28 - win_rate * 12,
+            "yards_per_game": 310 + win_rate * 80,
+            "yards_allowed_per_game": 390 - win_rate * 80,
+        },
+        "MLB": {
+            "runs_per_game": 3.5 + win_rate * 2.0,
+            "runs_allowed_per_game": 5.0 - win_rate * 2.0,
+            "batting_avg": 0.230 + win_rate * 0.04,
+        },
+        "NHL": {
+            "goals_for": 2.5 + win_rate * 1.2,
+            "goals_against": 3.5 - win_rate * 1.2,
+            "pp_pct": 0.16 + win_rate * 0.08,
+            "pk_pct": 0.76 + win_rate * 0.08,
+        },
     }
     base = defaults.get(sport, {})
     return {
         "team": team, "sport": sport, "elo_rating": elo,
-        "games_played": 40, "wins": 20, "losses": 20,
-        "home_wins": 12, "home_losses": 8, "away_wins": 8, "away_losses": 12,
-        "last5_wins": 3, "last10_wins": 5, "rest_days": 2.0,
+        "games_played": 40, "wins": wins, "losses": losses,
+        "home_wins": int(wins * 0.6), "home_losses": 20 - int(wins * 0.6),
+        "away_wins": wins - int(wins * 0.6), "away_losses": 20 - (wins - int(wins * 0.6)),
+        "last5_wins": rng.randint(1, 5), "last10_wins": rng.randint(3, 9),
+        "rest_days": rng.choice([1, 2, 2, 3, 4]),
         **base
     }
 

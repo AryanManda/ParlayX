@@ -64,9 +64,12 @@ async function pollStatus() {
       document.getElementById('scanOverlay').style.display = 'flex';
     } else {
       document.getElementById('scanOverlay').style.display = 'none';
-      if (s.ev_bets_count > 0 || s.parlays_count > 0) {
-        await loadData();
+      // Always load data after scan completes; show last progress msg briefly
+      if (s.last_scan && s.scan_progress && !s.scan_progress.startsWith('Demo')) {
+        const bar = document.getElementById('lastScan');
+        if (bar) bar.textContent = s.scan_progress;
       }
+      await loadData();
     }
   } catch (e) { /* silently ignore */ }
 }
@@ -79,6 +82,7 @@ async function loadData() {
     ]);
     state.bets = betsResp.bets;
     state.parlays = parlayResp.parlays;
+    state._lastScan = true;
     renderAll();
   } catch (e) { console.error(e); }
 }
@@ -115,7 +119,8 @@ function renderDashBets() {
   bets = bets.slice(0, 6);
 
   if (!bets.length) {
-    container.innerHTML = `<div class="empty-state"><i class="fa fa-search"></i><p>Click "Scan Now" or "Demo"</p></div>`;
+    const msg = state._lastScan ? 'No +EV bets found — odds are not beatable today, or try Demo mode' : 'Click "Scan Now" or "Demo" to load bets';
+    container.innerHTML = `<div class="empty-state"><i class="fa fa-search"></i><p>${msg}</p></div>`;
     return;
   }
   container.innerHTML = bets.map((b, i) => `
