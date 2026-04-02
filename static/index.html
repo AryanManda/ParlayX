@@ -1,0 +1,268 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>ParlayX — AI Parlay Analyzer</title>
+  <link rel="stylesheet" href="/static/css/style.css" />
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.0/css/all.min.css" />
+</head>
+<body>
+  <!-- SIDEBAR -->
+  <nav class="sidebar">
+    <div class="logo">
+      <span class="logo-icon">⚡</span>
+      <span class="logo-text">ParlayX</span>
+    </div>
+    <ul class="nav-links">
+      <li class="nav-item active" data-page="dashboard"><i class="fa fa-chart-line"></i> Dashboard</li>
+      <li class="nav-item" data-page="bets"><i class="fa fa-bolt"></i> +EV Bets</li>
+      <li class="nav-item" data-page="parlays"><i class="fa fa-layer-group"></i> Parlays</li>
+      <li class="nav-item" data-page="builder"><i class="fa fa-hammer"></i> Builder</li>
+    </ul>
+    <div class="sidebar-footer">
+      <div class="api-status" id="apiStatus">
+        <span class="dot" id="dotAnthropic"></span> Claude AI
+        <span class="dot" id="dotOdds"></span> Odds API
+      </div>
+    </div>
+  </nav>
+
+  <!-- MAIN CONTENT -->
+  <main class="main">
+    <!-- TOPBAR -->
+    <header class="topbar">
+      <div class="topbar-left">
+        <h1 class="page-title" id="pageTitle">Dashboard</h1>
+        <span class="last-scan" id="lastScan">Not scanned yet</span>
+      </div>
+      <div class="topbar-right">
+        <div class="sport-filters" id="sportFilters">
+          <button class="sport-btn active" data-sport="ALL">All</button>
+          <button class="sport-btn" data-sport="NBA">NBA</button>
+          <button class="sport-btn" data-sport="NFL">NFL</button>
+          <button class="sport-btn" data-sport="MLB">MLB</button>
+          <button class="sport-btn" data-sport="NHL">NHL</button>
+        </div>
+        <button class="btn btn-ghost" id="demoBtn"><i class="fa fa-play"></i> Demo</button>
+        <button class="btn btn-primary" id="scanBtn"><i class="fa fa-radar fa-sync"></i> Scan Now</button>
+      </div>
+    </header>
+
+    <!-- PAGES -->
+    <div class="page active" id="page-dashboard">
+      <!-- STAT CARDS -->
+      <div class="stat-grid">
+        <div class="stat-card">
+          <div class="stat-icon green"><i class="fa fa-bullseye"></i></div>
+          <div class="stat-info">
+            <span class="stat-value" id="evBetsCount">—</span>
+            <span class="stat-label">+EV Bets Found</span>
+          </div>
+        </div>
+        <div class="stat-card">
+          <div class="stat-icon blue"><i class="fa fa-layer-group"></i></div>
+          <div class="stat-info">
+            <span class="stat-value" id="parlaysCount">—</span>
+            <span class="stat-label">Parlays Built</span>
+          </div>
+        </div>
+        <div class="stat-card">
+          <div class="stat-icon yellow"><i class="fa fa-percent"></i></div>
+          <div class="stat-info">
+            <span class="stat-value" id="topEv">—</span>
+            <span class="stat-label">Best EV%</span>
+          </div>
+        </div>
+        <div class="stat-card">
+          <div class="stat-icon purple"><i class="fa fa-robot"></i></div>
+          <div class="stat-info">
+            <span class="stat-value" id="topGrade">—</span>
+            <span class="stat-label">Top Parlay Grade</span>
+          </div>
+        </div>
+      </div>
+
+      <!-- TOP BETS PREVIEW + TOP PARLAY -->
+      <div class="two-col">
+        <div class="card">
+          <div class="card-header">
+            <h2><i class="fa fa-bolt text-yellow"></i> Top +EV Bets</h2>
+            <button class="btn btn-sm btn-ghost" onclick="showPage('bets')">View All →</button>
+          </div>
+          <div id="dashBetsList" class="dash-bets-list">
+            <div class="empty-state"><i class="fa fa-search"></i><p>Click "Scan Now" or "Demo"</p></div>
+          </div>
+        </div>
+
+        <div class="card">
+          <div class="card-header">
+            <h2><i class="fa fa-trophy text-green"></i> Best Parlay</h2>
+            <button class="btn btn-sm btn-ghost" onclick="showPage('parlays')">All Parlays →</button>
+          </div>
+          <div id="dashParlay">
+            <div class="empty-state"><i class="fa fa-layer-group"></i><p>Run a scan to see parlays</p></div>
+          </div>
+        </div>
+      </div>
+
+      <!-- SCAN SETTINGS -->
+      <div class="card" style="margin-top:20px">
+        <div class="card-header"><h2><i class="fa fa-sliders"></i> Scan Settings</h2></div>
+        <div class="settings-grid">
+          <div class="setting-group">
+            <label>Bankroll ($)</label>
+            <input type="number" id="bankrollInput" value="1000" min="10" class="input" />
+          </div>
+          <div class="setting-group">
+            <label>Parlay Legs</label>
+            <select id="legsSelect" class="input">
+              <option value="2">2 Legs</option>
+              <option value="3" selected>3 Legs</option>
+              <option value="4">4 Legs</option>
+              <option value="5">5 Legs</option>
+            </select>
+          </div>
+          <div class="setting-group">
+            <label>Sports</label>
+            <div class="checkbox-row">
+              <label><input type="checkbox" value="NBA" checked class="sport-check"> NBA</label>
+              <label><input type="checkbox" value="NFL" checked class="sport-check"> NFL</label>
+              <label><input type="checkbox" value="MLB" checked class="sport-check"> MLB</label>
+              <label><input type="checkbox" value="NHL" checked class="sport-check"> NHL</label>
+            </div>
+          </div>
+          <div class="setting-group">
+            <label>Claude AI Analysis</label>
+            <label class="toggle">
+              <input type="checkbox" id="aiToggle" checked />
+              <span class="slider-toggle"></span>
+            </label>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- EV BETS PAGE -->
+    <div class="page" id="page-bets">
+      <div class="card">
+        <div class="card-header">
+          <h2><i class="fa fa-bolt text-yellow"></i> All +EV Bets</h2>
+          <div class="filter-row">
+            <select id="betSportFilter" class="input input-sm" onchange="renderBets()">
+              <option value="">All Sports</option>
+              <option value="NBA">NBA</option>
+              <option value="NFL">NFL</option>
+              <option value="MLB">MLB</option>
+              <option value="NHL">NHL</option>
+            </select>
+            <select id="betGradeFilter" class="input input-sm" onchange="renderBets()">
+              <option value="">All Grades</option>
+              <option value="A+">A+ Only</option>
+              <option value="A">A and above</option>
+              <option value="B">B and above</option>
+            </select>
+            <input type="number" id="minEvFilter" placeholder="Min EV%" class="input input-sm" style="width:90px" onchange="renderBets()" />
+          </div>
+        </div>
+        <div class="table-wrap">
+          <table class="data-table" id="betsTable">
+            <thead>
+              <tr>
+                <th>Sport</th>
+                <th>Bet</th>
+                <th>Teams</th>
+                <th>Best Odds</th>
+                <th>Model%</th>
+                <th>Implied%</th>
+                <th>EV%</th>
+                <th>Grade</th>
+                <th>Confidence</th>
+                <th>Sharp</th>
+                <th>Action</th>
+              </tr>
+            </thead>
+            <tbody id="betsTableBody">
+              <tr><td colspan="11" class="empty-row">No bets yet — run a scan or load demo</td></tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+
+    <!-- PARLAYS PAGE -->
+    <div class="page" id="page-parlays">
+      <div id="parlaysList">
+        <div class="empty-state card"><i class="fa fa-layer-group"></i><p>No parlays yet — run a scan</p></div>
+      </div>
+    </div>
+
+    <!-- BUILDER PAGE -->
+    <div class="page" id="page-builder">
+      <div class="two-col">
+        <div class="card">
+          <div class="card-header"><h2><i class="fa fa-hammer"></i> Custom Parlay Builder</h2></div>
+          <p class="text-muted" style="padding: 0 20px 10px">Add your own legs and we'll calculate EV, simulate win probability, and get a Claude AI verdict.</p>
+
+          <div id="customLegs" style="padding: 0 20px">
+            <!-- Legs added here -->
+          </div>
+
+          <div style="padding: 16px 20px">
+            <button class="btn btn-ghost" onclick="addBuilderLeg()"><i class="fa fa-plus"></i> Add Leg</button>
+          </div>
+
+          <div class="settings-grid" style="padding: 0 20px 20px">
+            <div class="setting-group">
+              <label>Bankroll ($)</label>
+              <input type="number" id="builderBankroll" value="1000" class="input" />
+            </div>
+            <div class="setting-group">
+              <label>Claude AI Analysis</label>
+              <label class="toggle">
+                <input type="checkbox" id="builderAiToggle" checked />
+                <span class="slider-toggle"></span>
+              </label>
+            </div>
+          </div>
+
+          <div style="padding: 0 20px 24px">
+            <button class="btn btn-primary btn-full" onclick="submitCustomParlay()">
+              <i class="fa fa-calculator"></i> Analyze Parlay
+            </button>
+          </div>
+        </div>
+
+        <div class="card">
+          <div class="card-header"><h2><i class="fa fa-chart-pie"></i> Analysis Result</h2></div>
+          <div id="builderResult">
+            <div class="empty-state"><i class="fa fa-arrow-left"></i><p>Build a parlay to see analysis</p></div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </main>
+
+  <!-- SCAN PROGRESS OVERLAY -->
+  <div class="overlay" id="scanOverlay" style="display:none">
+    <div class="overlay-box">
+      <div class="spinner"></div>
+      <h3>Scanning Markets...</h3>
+      <p id="overlayProgress">Fetching games from ESPN...</p>
+    </div>
+  </div>
+
+  <!-- AI ANALYSIS MODAL -->
+  <div class="modal-backdrop" id="aiModal" style="display:none" onclick="closeModal()">
+    <div class="modal" onclick="event.stopPropagation()">
+      <div class="modal-header">
+        <h2><i class="fa fa-robot"></i> Claude AI Analysis</h2>
+        <button class="modal-close" onclick="closeModal()"><i class="fa fa-times"></i></button>
+      </div>
+      <div class="modal-body" id="aiModalBody">Loading...</div>
+    </div>
+  </div>
+
+  <script src="/static/js/app.js"></script>
+</body>
+</html>
