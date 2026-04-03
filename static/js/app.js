@@ -23,10 +23,11 @@ function showPage(name) {
   document.getElementById('page-' + name).classList.add('active');
   document.querySelector(`[data-page="${name}"]`).classList.add('active');
   document.getElementById('pageTitle').textContent =
-    { dashboard: 'Dashboard', bets: '+EV Bets', parlays: 'Parlay Slips', builder: 'Parlay Builder' }[name];
+    { dashboard: 'Dashboard', bets: '+EV Bets', parlays: 'Parlay Slips', builder: 'Parlay Builder', aipicks: 'AI Picks' }[name];
 
   if (name === 'bets') renderBets();
   if (name === 'parlays') renderParlays();
+  if (name === 'aipicks') loadAiPicks();
 }
 
 document.querySelectorAll('.nav-item').forEach(el => {
@@ -51,7 +52,10 @@ async function pollStatus() {
 
     // API key dots
     document.getElementById('dotAnthropic').className = 'dot' + (s.has_anthropic_key ? ' active' : '');
-    document.getElementById('dotOdds').className = 'dot' + (s.has_odds_key ? ' active' : '');
+    document.getElementById('dotOdds').className     = 'dot' + (s.has_odds_key       ? ' active' : '');
+    document.getElementById('dotOpenAI').className   = 'dot' + (s.has_openai_key     ? ' active' : '');
+    document.getElementById('dotDeepSeek').className = 'dot' + (s.has_deepseek_key   ? ' active' : '');
+    document.getElementById('dotGemini').className   = 'dot' + (s.has_gemini_key     ? ' active' : '');
 
     if (s.last_scan) {
       const d = new Date(s.last_scan);
@@ -486,6 +490,100 @@ function metric(label, val, color) {
     <span class="result-metric-label">${label}</span>
     <span class="result-metric-val" style="color:${color}">${val}</span>
   </div>`;
+}
+
+// ── AI Picks page ──────────────────────────────────────────────────────────
+
+const BOT_META = {
+  claude:   { name: 'Claude',   icon: '⚡', cls: 'bot-claude',   color: '#f97316' },
+  chatgpt:  { name: 'ChatGPT',  icon: '◎', cls: 'bot-chatgpt',  color: '#10b981' },
+  deepseek: { name: 'DeepSeek', icon: '◈', cls: 'bot-deepseek', color: '#3b82f6' },
+  gemini:   { name: 'Gemini',   icon: '✦', cls: 'bot-gemini',   color: '#a855f7' },
+};
+
+function switchBot(bot) {
+  document.querySelectorAll('.bot-tab').forEach(t => t.classList.remove('active'));
+  document.querySelectorAll('.bot-panel').forEach(p => p.classList.remove('active'));
+  document.querySelector(`[data-bot="${bot}"]`).classList.add('active');
+  document.getElementById(`panel-${bot}`).classList.add('active');
+}
+
+async function loadAiPicks() {
+  const btn = document.getElementById('refreshPicksBtn');
+  if (btn) { btn.disabled = true; btn.innerHTML = '<i class="fa fa-spinner fa-spin"></i> Loading...'; }
+
+  // Show spinners in all panels
+  for (const bot of Object.keys(BOT_META)) {
+    document.getElementById(`panel-${bot}`).innerHTML =
+      `<div class="empty-state"><div class="spinner"></div><p>Asking ${BOT_META[bot].name}...</p></div>`;
+  }
+
+  try {
+    const picks = await api('/ai-picks');
+    for (const [bot, pick] of Object.entries(picks)) {
+      renderPickCard(bot, pick);
+    }
+  } catch (e) {
+    for (const bot of Object.keys(BOT_META)) {
+      document.getElementById(`panel-${bot}`).innerHTML =
+        `<div class="empty-state"><p style="color:var(--red)">Error: ${e.message}</p></div>`;
+    }
+  } finally {
+    if (btn) { btn.disabled = false; btn.innerHTML = '<i class="fa fa-sync"></i> Refresh All Picks'; }
+  }
+}
+
+function renderPickCard(bot, pick) {
+  const meta = BOT_META[bot] || { name: bot, icon: '?', cls: '', color: 'var(--text2)' };
+  const panel = document.getElementById(`panel-${bot}`);
+  if (!panel) return;
+
+  const odds = pick.odds || 0;
+  const oddsStr = odds > 0 ? `+${odds}` : `${odds}`;
+  const oddsClass = odds > 0 ? 'pos' : 'neg';
+  const verdictClass = `verdict-${pick.verdict || 'UNAVAILABLE'}`;
+  const confClass = `conf-${pick.confidence || 'low'}`;
+  const isUnavailable = pick.verdict === 'UNAVAILABLE' || !pick.odds;
+
+  panel.innerHTML = `
+    <div class="pick-card ${meta.cls}">
+      <div class="pick-hero">
+        <div class="pick-hero-left">
+          <span class="pick-bot-name" style="color:${meta.cls ? '' : meta.color}">
+            ${meta.icon} ${meta.name}'s Pick
+          </span>
+          <div class="pick-name">${pick.pick || '—'}</div>
+          <div class="pick-teams">${pick.teams || '—'} ${pick.sport && pick.sport !== '—' ? '· <span class="sport-badge sport-' + pick.sport + '">' + pick.sport + '</span>' : ''}</div>
+        </div>
+        <div class="pick-hero-right">
+          ${!isUnavailable ? `<div class="pick-odds ${oddsClass}">${oddsStr}</div>` : ''}
+          <span class="pick-verdict ${verdictClass}">${pick.verdict || 'UNAVAILABLE'}</span>
+        </div>
+      </div>
+
+      <div class="pick-body">
+        ${pick.key_edge && pick.key_edge !== '—' ? `
+        <div class="pick-edge-box">
+          <div class="pick-edge-label">Core Edge</div>
+          <div class="pick-edge-text">${pick.key_edge}</div>
+        </div>` : ''}
+
+        <div>
+          <div class="pick-reasoning-label">Analysis</div>
+          <div class="pick-reasoning">${pick.reasoning || 'No analysis available.'}</div>
+        </div>
+      </div>
+
+      <div class="pick-footer">
+        <div class="pick-conf">
+          <span class="pick-conf-label">Confidence:</span>
+          <span class="${confClass}">${(pick.confidence || 'low').toUpperCase()}</span>
+        </div>
+        ${pick.risk_warning && pick.risk_warning !== '—' ? `
+        <div class="pick-risk"><i class="fa fa-triangle-exclamation"></i> ${pick.risk_warning}</div>` : ''}
+        ${pick.model && pick.model !== '—' ? `<span class="pick-model-tag">${pick.model}</span>` : ''}
+      </div>
+    </div>`;
 }
 
 // ── Init ───────────────────────────────────────────────────────────────────

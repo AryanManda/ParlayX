@@ -14,6 +14,9 @@ DATA_DIR.mkdir(exist_ok=True)
 # API Keys (set in .env file)
 ANTHROPIC_API_KEY = os.getenv("ANTHROPIC_API_KEY", "")
 ODDS_API_KEY = os.getenv("ODDS_API_KEY", "")  # https://the-odds-api.com (free tier)
+OPENAI_API_KEY = os.getenv("OPENAI_API_KEY", "")
+DEEPSEEK_API_KEY = os.getenv("DEEPSEEK_API_KEY", "")
+GEMINI_API_KEY = os.getenv("GEMINI_API_KEY", "")
 
 # Database
 DATABASE_URL = f"sqlite:///{DATA_DIR}/parlayx.db"

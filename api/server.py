@@ -19,7 +19,7 @@ from src.analysis.correlation import suggest_uncorrelated_combo
 from src.parlay.builder import build_parlay, find_best_parlays
 from src.engine import analyze_game, scan_today, get_elo
 from src.ai.advisor import get_advisor
-from config import ANTHROPIC_API_KEY, ODDS_API_KEY
+from config import ANTHROPIC_API_KEY, ODDS_API_KEY, OPENAI_API_KEY, DEEPSEEK_API_KEY, GEMINI_API_KEY
 
 app = FastAPI(title="ParlayX API", version="1.0")
 
@@ -126,6 +126,9 @@ async def get_status():
         "scan_progress": _state["scan_progress"],
         "has_anthropic_key": bool(ANTHROPIC_API_KEY),
         "has_odds_key": bool(ODDS_API_KEY),
+        "has_openai_key": bool(OPENAI_API_KEY),
+        "has_deepseek_key": bool(DEEPSEEK_API_KEY),
+        "has_gemini_key": bool(GEMINI_API_KEY),
         "sports_scanned": _state["scan_sports"],
     }
 
@@ -268,6 +271,16 @@ def _get_demo_ev_bets() -> list[BetEvaluation]:
         evaluate_bet("MLB","g8","moneyline","home_win","Yankees ML",0.60,"high",-140,teams="Yankees vs Red Sox",game_date="Today"),
     ]
     return demo
+
+@app.get("/api/ai-picks")
+async def get_ai_picks():
+    """Run all 4 AI models and return each one's single best pick."""
+    from src.ai.multi_advisor import get_all_picks
+    bets = _state.get("ev_bets", [])
+    loop = asyncio.get_event_loop()
+    picks = await loop.run_in_executor(None, lambda: get_all_picks(bets))
+    return picks
+
 
 @app.on_event("startup")
 async def startup():

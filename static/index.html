@@ -19,11 +19,15 @@
       <li class="nav-item" data-page="bets"><i class="fa fa-bolt"></i> +EV Bets</li>
       <li class="nav-item" data-page="parlays"><i class="fa fa-layer-group"></i> Parlays</li>
       <li class="nav-item" data-page="builder"><i class="fa fa-hammer"></i> Builder</li>
+      <li class="nav-item" data-page="aipicks"><i class="fa fa-robot"></i> AI Picks</li>
     </ul>
     <div class="sidebar-footer">
       <div class="api-status" id="apiStatus">
-        <span class="dot" id="dotAnthropic"></span> Claude AI
-        <span class="dot" id="dotOdds"></span> Odds API
+        <span class="dot" id="dotAnthropic"></span> Claude
+        <span class="dot" id="dotOpenAI"></span> GPT-4o
+        <span class="dot" id="dotDeepSeek"></span> DeepSeek
+        <span class="dot" id="dotGemini"></span> Gemini
+        <span class="dot" id="dotOdds"></span> Odds
       </div>
     </div>
   </nav>
@@ -238,6 +242,47 @@
           <div id="builderResult">
             <div class="empty-state"><i class="fa fa-arrow-left"></i><p>Build a parlay to see analysis</p></div>
           </div>
+        </div>
+      </div>
+    </div>
+    <!-- AI PICKS PAGE -->
+    <div class="page" id="page-aipicks">
+      <div class="aipicks-header">
+        <p class="aipicks-subtitle">Each AI model independently analyzes today's market and names its single best bet.</p>
+        <button class="btn btn-primary" id="refreshPicksBtn" onclick="loadAiPicks()">
+          <i class="fa fa-sync"></i> Refresh All Picks
+        </button>
+      </div>
+
+      <!-- BOT TABS -->
+      <div class="bot-tabs">
+        <button class="bot-tab active" data-bot="claude" onclick="switchBot('claude')">
+          <span class="bot-tab-icon claude-icon">⚡</span> Claude
+        </button>
+        <button class="bot-tab" data-bot="chatgpt" onclick="switchBot('chatgpt')">
+          <span class="bot-tab-icon gpt-icon">◎</span> ChatGPT
+        </button>
+        <button class="bot-tab" data-bot="deepseek" onclick="switchBot('deepseek')">
+          <span class="bot-tab-icon ds-icon">◈</span> DeepSeek
+        </button>
+        <button class="bot-tab" data-bot="gemini" onclick="switchBot('gemini')">
+          <span class="bot-tab-icon gem-icon">✦</span> Gemini
+        </button>
+      </div>
+
+      <!-- BOT PANELS -->
+      <div id="aipicks-panels">
+        <div class="bot-panel active" id="panel-claude">
+          <div class="empty-state"><div class="spinner"></div><p>Loading Claude's pick...</p></div>
+        </div>
+        <div class="bot-panel" id="panel-chatgpt">
+          <div class="empty-state"><div class="spinner"></div><p>Loading ChatGPT's pick...</p></div>
+        </div>
+        <div class="bot-panel" id="panel-deepseek">
+          <div class="empty-state"><div class="spinner"></div><p>Loading DeepSeek's pick...</p></div>
+        </div>
+        <div class="bot-panel" id="panel-gemini">
+          <div class="empty-state"><div class="spinner"></div><p>Loading Gemini's pick...</p></div>
         </div>
       </div>
     </div>
