@@ -14,13 +14,12 @@ def _build_prompt(bets: list[dict]) -> str:
     if not bets:
         lines = ["No live bets available — give a general sports betting insight for today."]
     else:
-        top = bets[:8]
-        lines = ["Here are today's top +EV betting opportunities identified by our model:\n"]
+        top = bets[:5]
+        lines = ["Top +EV bets today:\n"]
         for i, b in enumerate(top, 1):
             lines.append(
                 f"{i}. {b.get('description','')} | {b.get('teams','')} | {b.get('sport','')} | "
-                f"Odds: {b.get('best_odds',0):+d} | Model: {b.get('model_prob',0)}% | "
-                f"EV: +{b.get('ev_pct',0)}% | Grade: {b.get('grade','')}"
+                f"Odds: {b.get('best_odds',0):+d} | Model: {b.get('model_prob',0)}% | EV: +{b.get('ev_pct',0)}%"
             )
 
     prompt = "\n".join(lines)
@@ -72,16 +71,16 @@ def get_claude_pick(bets: list[dict]) -> dict:
         return _no_key_response("Claude", "ANTHROPIC_API_KEY")
     try:
         import anthropic
-        client = anthropic.Anthropic(api_key=ANTHROPIC_API_KEY)
+        client = anthropic.Anthropic(api_key=ANTHROPIC_API_KEY, timeout=25.0)
         msg = client.messages.create(
-            model="claude-opus-4-6",
-            max_tokens=600,
+            model="claude-haiku-4-5-20251001",
+            max_tokens=400,
             messages=[{"role": "user", "content": _build_prompt(bets)}],
         )
         raw = msg.content[0].text if msg.content else ""
         result = _parse_pick(raw, "Claude")
         result["bot"] = "Claude"
-        result["model"] = "claude-opus-4-6"
+        result["model"] = "claude-haiku-4-5-20251001"
         return result
     except Exception as e:
         return _error_response("Claude", str(e))

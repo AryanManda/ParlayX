@@ -512,30 +512,32 @@ async function loadAiPicks() {
   const btn = document.getElementById('refreshPicksBtn');
   if (btn) { btn.disabled = true; btn.innerHTML = '<i class="fa fa-spinner fa-spin"></i> Loading...'; }
 
-  // Show spinner only in active panel, "pending" message in others
-  const activeBot = document.querySelector('.bot-tab.active')?.dataset.bot || 'claude';
+  // Show spinner in each panel immediately
   for (const bot of Object.keys(BOT_META)) {
-    const isActive = bot === activeBot;
     document.getElementById(`panel-${bot}`).innerHTML =
-      `<div class="empty-state"><div class="${isActive ? 'spinner' : ''}"></div><p>${isActive ? 'Asking ' + BOT_META[bot].name + '...' : 'Loading...'}</p></div>`;
+      `<div class="empty-state"><div class="spinner"></div><p>Asking ${BOT_META[bot].name}...</p></div>`;
   }
 
-  try {
-    const picks = await api('/ai-picks');
-    for (const [bot, pick] of Object.entries(picks)) {
+  // Fire all 4 requests in parallel — each renders as soon as it resolves
+  let completed = 0;
+  const total = Object.keys(BOT_META).length;
+  const promises = Object.keys(BOT_META).map(async bot => {
+    try {
+      const pick = await api(`/ai-picks/${bot}`);
       renderPickCard(bot, pick);
-    }
-    // Show only the active tab's panel after loading
-    const activeBot = document.querySelector('.bot-tab.active')?.dataset.bot || 'claude';
-    switchBot(activeBot);
-  } catch (e) {
-    for (const bot of Object.keys(BOT_META)) {
+    } catch (e) {
       document.getElementById(`panel-${bot}`).innerHTML =
         `<div class="empty-state"><p style="color:var(--red)">Error: ${e.message}</p></div>`;
+    } finally {
+      completed++;
+      if (completed === total && btn) {
+        btn.disabled = false;
+        btn.innerHTML = '<i class="fa fa-sync"></i> Refresh All Picks';
+      }
     }
-  } finally {
-    if (btn) { btn.disabled = false; btn.innerHTML = '<i class="fa fa-sync"></i> Refresh All Picks'; }
-  }
+  });
+
+  await Promise.allSettled(promises);
 }
 
 function renderPickCard(bot, pick) {

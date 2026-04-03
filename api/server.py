@@ -272,14 +272,23 @@ def _get_demo_ev_bets() -> list[BetEvaluation]:
     ]
     return demo
 
-@app.get("/api/ai-picks")
-async def get_ai_picks():
-    """Run all 4 AI models and return each one's single best pick."""
-    from src.ai.multi_advisor import get_all_picks
+@app.get("/api/ai-picks/{bot}")
+async def get_ai_pick_for_bot(bot: str):
+    """Get a single bot's pick — call separately per bot so each resolves independently."""
+    from src.ai.multi_advisor import get_claude_pick, get_chatgpt_pick, get_deepseek_pick, get_gemini_pick
+    fn_map = {
+        "claude": get_claude_pick,
+        "chatgpt": get_chatgpt_pick,
+        "deepseek": get_deepseek_pick,
+        "gemini": get_gemini_pick,
+    }
+    fn = fn_map.get(bot.lower())
+    if not fn:
+        raise HTTPException(404, f"Unknown bot: {bot}")
     bets = _state.get("ev_bets", [])
     loop = asyncio.get_event_loop()
-    picks = await loop.run_in_executor(None, lambda: get_all_picks(bets))
-    return picks
+    pick = await loop.run_in_executor(None, lambda: fn(bets))
+    return pick
 
 
 @app.on_event("startup")
