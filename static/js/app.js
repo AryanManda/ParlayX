@@ -512,16 +512,32 @@ async function loadAiPicks() {
   const btn = document.getElementById('refreshPicksBtn');
   if (btn) { btn.disabled = true; btn.innerHTML = '<i class="fa fa-spinner fa-spin"></i> Loading...'; }
 
-  // Show spinner in each panel immediately
+  // Check which keys are active first
+  let keyStatus = {};
+  try {
+    const s = await api('/status');
+    keyStatus = {
+      claude:   s.has_anthropic_key,
+      chatgpt:  s.has_openai_key,
+      deepseek: s.has_deepseek_key,
+      gemini:   s.has_gemini_key,
+    };
+  } catch(e) {}
+
+  // Immediately render no-key cards for inactive bots; spinner for active ones
   for (const bot of Object.keys(BOT_META)) {
-    document.getElementById(`panel-${bot}`).innerHTML =
-      `<div class="empty-state"><div class="spinner"></div><p>Asking ${BOT_META[bot].name}...</p></div>`;
+    if (keyStatus[bot]) {
+      document.getElementById(`panel-${bot}`).innerHTML =
+        `<div class="empty-state"><div class="spinner"></div><p>Asking ${BOT_META[bot].name}...</p></div>`;
+    } else {
+      renderNoKeyCard(bot);
+    }
   }
 
-  // Fire all 4 requests in parallel — each renders as soon as it resolves
+  // Only call API for bots that have keys
+  const activeBots = Object.keys(BOT_META).filter(b => keyStatus[b]);
   let completed = 0;
-  const total = Object.keys(BOT_META).length;
-  const promises = Object.keys(BOT_META).map(async bot => {
+  const promises = activeBots.map(async bot => {
     try {
       const pick = await api(`/ai-picks/${bot}`);
       renderPickCard(bot, pick);
@@ -530,14 +546,44 @@ async function loadAiPicks() {
         `<div class="empty-state"><p style="color:var(--red)">Error: ${e.message}</p></div>`;
     } finally {
       completed++;
-      if (completed === total && btn) {
+      if (completed === activeBots.length && btn) {
         btn.disabled = false;
         btn.innerHTML = '<i class="fa fa-sync"></i> Refresh All Picks';
       }
     }
   });
 
+  if (!activeBots.length && btn) {
+    btn.disabled = false;
+    btn.innerHTML = '<i class="fa fa-sync"></i> Refresh All Picks';
+  }
+
   await Promise.allSettled(promises);
+}
+
+function renderNoKeyCard(bot) {
+  const meta = BOT_META[bot];
+  const keyNames = {
+    claude: 'ANTHROPIC_API_KEY', chatgpt: 'OPENAI_API_KEY',
+    deepseek: 'DEEPSEEK_API_KEY', gemini: 'GEMINI_API_KEY',
+  };
+  const urls = {
+    claude: 'console.anthropic.com', chatgpt: 'platform.openai.com/api-keys',
+    deepseek: 'platform.deepseek.com', gemini: 'aistudio.google.com/app/apikey',
+  };
+  const panel = document.getElementById(`panel-${bot}`);
+  panel.innerHTML = `
+    <div class="pick-card ${meta.cls}" style="max-width:820px;opacity:0.75">
+      <div class="pick-hero" style="justify-content:center;text-align:center;flex-direction:column;gap:12px;padding:40px">
+        <div style="font-size:3rem">${meta.icon}</div>
+        <div style="font-size:1.4rem;font-weight:900;color:var(--text2)">${meta.name} not connected</div>
+        <div style="font-size:0.88rem;color:var(--text3);max-width:380px">
+          Add <code style="background:var(--bg4);padding:2px 6px;border-radius:4px">${keyNames[bot]}</code>
+          to your <code style="background:var(--bg4);padding:2px 6px;border-radius:4px">.env</code> file to activate ${meta.name} picks.
+        </div>
+        <div style="font-size:0.8rem;color:var(--text3)">Get a key at <strong>${urls[bot]}</strong></div>
+      </div>
+    </div>`;
 }
 
 function renderPickCard(bot, pick) {

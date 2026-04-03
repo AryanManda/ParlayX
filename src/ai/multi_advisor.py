@@ -83,7 +83,12 @@ def get_claude_pick(bets: list[dict]) -> dict:
         result["model"] = "claude-haiku-4-5-20251001"
         return result
     except Exception as e:
-        return _error_response("Claude", str(e))
+        err = str(e)
+        if "credit" in err.lower() or "billing" in err.lower():
+            return {**_no_key_response("Claude", "ANTHROPIC_API_KEY"),
+                    "reasoning": "Your Anthropic account has no credits. Add credits at console.anthropic.com → Billing.",
+                    "verdict": "UNAVAILABLE", "error": "No credits"}
+        return _error_response("Claude", err)
 
 
 # ── ChatGPT (OpenAI) ──────────────────────────────────────────────────────────
