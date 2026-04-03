@@ -512,10 +512,12 @@ async function loadAiPicks() {
   const btn = document.getElementById('refreshPicksBtn');
   if (btn) { btn.disabled = true; btn.innerHTML = '<i class="fa fa-spinner fa-spin"></i> Loading...'; }
 
-  // Show spinners in all panels
+  // Show spinner only in active panel, "pending" message in others
+  const activeBot = document.querySelector('.bot-tab.active')?.dataset.bot || 'claude';
   for (const bot of Object.keys(BOT_META)) {
+    const isActive = bot === activeBot;
     document.getElementById(`panel-${bot}`).innerHTML =
-      `<div class="empty-state"><div class="spinner"></div><p>Asking ${BOT_META[bot].name}...</p></div>`;
+      `<div class="empty-state"><div class="${isActive ? 'spinner' : ''}"></div><p>${isActive ? 'Asking ' + BOT_META[bot].name + '...' : 'Loading...'}</p></div>`;
   }
 
   try {
@@ -523,6 +525,9 @@ async function loadAiPicks() {
     for (const [bot, pick] of Object.entries(picks)) {
       renderPickCard(bot, pick);
     }
+    // Show only the active tab's panel after loading
+    const activeBot = document.querySelector('.bot-tab.active')?.dataset.bot || 'claude';
+    switchBot(activeBot);
   } catch (e) {
     for (const bot of Object.keys(BOT_META)) {
       document.getElementById(`panel-${bot}`).innerHTML =
