@@ -508,60 +508,52 @@ function switchBot(bot) {
   document.getElementById(`panel-${bot}`).classList.add('active');
 }
 
+async function fetchWithTimeout(url, ms) {
+  const ctrl = new AbortController();
+  const id = setTimeout(() => ctrl.abort(), ms);
+  try {
+    const r = await fetch(url, { signal: ctrl.signal });
+    clearTimeout(id);
+    if (!r.ok) throw new Error('HTTP ' + r.status);
+    return await r.json();
+  } catch(e) {
+    clearTimeout(id);
+    throw e;
+  }
+}
+
 async function loadAiPicks() {
   const btn = document.getElementById('refreshPicksBtn');
   if (btn) { btn.disabled = true; btn.innerHTML = '<i class="fa fa-spinner fa-spin"></i> Loading...'; }
 
-  // Check which keys are active first
-  let keyStatus = {};
-  try {
-    const s = await api('/status');
-    keyStatus = {
-      claude:   s.has_anthropic_key,
-      chatgpt:  s.has_openai_key,
-      deepseek: s.has_deepseek_key,
-      gemini:   s.has_gemini_key,
-    };
-  } catch(e) {}
-
-  // Immediately render no-key cards for inactive bots; spinner for active ones
+  // Show spinner in active panel, "queued" in others immediately
+  const activeBot = document.querySelector('.bot-tab.active')?.dataset.bot || 'claude';
   for (const bot of Object.keys(BOT_META)) {
-    if (keyStatus[bot]) {
-      document.getElementById(`panel-${bot}`).innerHTML =
-        `<div class="empty-state"><div class="spinner"></div><p>Asking ${BOT_META[bot].name}...</p></div>`;
+    const panel = document.getElementById(`panel-${bot}`);
+    if (bot === activeBot) {
+      panel.innerHTML = `<div class="empty-state"><div class="spinner"></div><p>Asking ${BOT_META[bot].name}...</p></div>`;
     } else {
-      renderNoKeyCard(bot);
+      panel.innerHTML = `<div class="empty-state"><p style="color:var(--text3)">Click tab to load ${BOT_META[bot].name}'s pick</p></div>`;
     }
   }
 
-  // Only call API for bots that have keys
-  const activeBots = Object.keys(BOT_META).filter(b => keyStatus[b]);
-  let completed = 0;
-  const promises = activeBots.map(async bot => {
+  // Load all 4 in parallel with 20s timeout each — always render something
+  const promises = Object.keys(BOT_META).map(async bot => {
     try {
-      const pick = await api(`/ai-picks/${bot}`);
+      const pick = await fetchWithTimeout(`/api/ai-picks/${bot}`, 20000);
       renderPickCard(bot, pick);
     } catch (e) {
-      document.getElementById(`panel-${bot}`).innerHTML =
-        `<div class="empty-state"><p style="color:var(--red)">Error: ${e.message}</p></div>`;
-    } finally {
-      completed++;
-      if (completed === activeBots.length && btn) {
-        btn.disabled = false;
-        btn.innerHTML = '<i class="fa fa-sync"></i> Refresh All Picks';
-      }
+      const msg = e.name === 'AbortError' ? 'Request timed out' : e.message;
+      renderNoKeyCard(bot, msg);
     }
   });
 
-  if (!activeBots.length && btn) {
-    btn.disabled = false;
-    btn.innerHTML = '<i class="fa fa-sync"></i> Refresh All Picks';
-  }
-
   await Promise.allSettled(promises);
+
+  if (btn) { btn.disabled = false; btn.innerHTML = '<i class="fa fa-sync"></i> Refresh All Picks'; }
 }
 
-function renderNoKeyCard(bot) {
+function renderNoKeyCard(bot, customMsg) {
   const meta = BOT_META[bot];
   const keyNames = {
     claude: 'ANTHROPIC_API_KEY', chatgpt: 'OPENAI_API_KEY',
@@ -577,9 +569,8 @@ function renderNoKeyCard(bot) {
       <div class="pick-hero" style="justify-content:center;text-align:center;flex-direction:column;gap:12px;padding:40px">
         <div style="font-size:3rem">${meta.icon}</div>
         <div style="font-size:1.4rem;font-weight:900;color:var(--text2)">${meta.name} not connected</div>
-        <div style="font-size:0.88rem;color:var(--text3);max-width:380px">
-          Add <code style="background:var(--bg4);padding:2px 6px;border-radius:4px">${keyNames[bot]}</code>
-          to your <code style="background:var(--bg4);padding:2px 6px;border-radius:4px">.env</code> file to activate ${meta.name} picks.
+        <div style="font-size:0.88rem;color:var(--text3);max-width:400px">
+          ${customMsg || `Add <code style="background:var(--bg4);padding:2px 6px;border-radius:4px">${keyNames[bot]}</code> to your .env file`}
         </div>
         <div style="font-size:0.8rem;color:var(--text3)">Get a key at <strong>${urls[bot]}</strong></div>
       </div>
@@ -590,6 +581,12 @@ function renderPickCard(bot, pick) {
   const meta = BOT_META[bot] || { name: bot, icon: '?', cls: '', color: 'var(--text2)' };
   const panel = document.getElementById(`panel-${bot}`);
   if (!panel) return;
+
+  // Show no-key card for unavailable/error states
+  if (pick.verdict === 'UNAVAILABLE' || pick.error) {
+    renderNoKeyCard(bot, pick.reasoning || pick.error || 'API key not configured');
+    return;
+  }
 
   const odds = pick.odds || 0;
   const oddsStr = odds > 0 ? `+${odds}` : `${odds}`;
