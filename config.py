@@ -5,7 +5,7 @@ import os
 from pathlib import Path
 from dotenv import load_dotenv
 
-load_dotenv(dotenv_path=Path(__file__).parent / ".env")
+load_dotenv(dotenv_path=Path(__file__).parent / ".env", encoding='utf-8-sig', override=True)
 
 BASE_DIR = Path(__file__).parent
 DATA_DIR = BASE_DIR / "data"
