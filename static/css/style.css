@@ -840,6 +840,180 @@ body {
   font-family: monospace;
 }
 
+/* ── Final Four Rankings ─────────────────────────────────── */
+.ff-section {
+  background: var(--bg2);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  overflow: hidden;
+  max-width: 820px;
+  margin-bottom: 0;
+}
+
+.ff-section-header {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 18px 24px;
+  background: var(--bg3);
+  border-bottom: 1px solid var(--border);
+  font-size: 1rem;
+  font-weight: 800;
+  letter-spacing: 0.3px;
+}
+.ff-trophy { font-size: 1.2rem; }
+.ff-model-tag {
+  margin-left: auto;
+  font-size: 0.75rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 1px;
+}
+
+.ff-rankings { display: flex; flex-direction: column; }
+
+.ff-rank-row {
+  display: flex;
+  align-items: flex-start;
+  gap: 16px;
+  padding: 18px 24px;
+  border-bottom: 1px solid var(--border);
+  transition: background 0.15s;
+}
+.ff-rank-row:last-child { border-bottom: none; }
+.ff-rank-row:hover { background: var(--bg3); }
+.ff-rank-row.rank-1 { background: linear-gradient(90deg, rgba(249,115,22,0.04) 0%, transparent 60%); }
+.ff-rank-row.rank-1:hover { background: linear-gradient(90deg, rgba(249,115,22,0.08) 0%, var(--bg3) 60%); }
+
+.ff-rank-medal { font-size: 1.6rem; flex-shrink: 0; width: 36px; text-align: center; padding-top: 2px; }
+
+.ff-rank-info { flex: 1; display: flex; flex-direction: column; gap: 8px; }
+
+.ff-rank-top {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+.ff-team-name {
+  font-size: 1.1rem;
+  font-weight: 800;
+  color: var(--text);
+}
+.ff-meta-badges { display: flex; gap: 6px; flex-wrap: wrap; }
+.ff-seed {
+  background: var(--bg4);
+  color: var(--text2);
+  padding: 2px 8px;
+  border-radius: 4px;
+  font-size: 0.72rem;
+  font-weight: 700;
+}
+.ff-region {
+  background: var(--blue-dim);
+  color: var(--blue);
+  padding: 2px 8px;
+  border-radius: 4px;
+  font-size: 0.72rem;
+  font-weight: 700;
+}
+.ff-record {
+  color: var(--text3);
+  font-size: 0.75rem;
+}
+
+.ff-prob-row {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+.ff-prob-bar-bg {
+  flex: 1;
+  height: 6px;
+  background: var(--bg4);
+  border-radius: 3px;
+  overflow: hidden;
+}
+.ff-prob-bar {
+  height: 100%;
+  border-radius: 3px;
+  transition: width 0.6s ease;
+}
+.ff-prob-pct {
+  font-size: 0.95rem;
+  font-weight: 800;
+  font-family: monospace;
+  min-width: 38px;
+  text-align: right;
+}
+
+.ff-strength-risk { display: flex; flex-direction: column; gap: 4px; }
+.ff-strength {
+  font-size: 0.8rem;
+  color: var(--green);
+  display: flex;
+  gap: 6px;
+  align-items: flex-start;
+}
+.ff-strength i { margin-top: 1px; flex-shrink: 0; }
+.ff-risk {
+  font-size: 0.8rem;
+  color: var(--text3);
+  display: flex;
+  gap: 6px;
+  align-items: flex-start;
+}
+.ff-risk i { margin-top: 1px; flex-shrink: 0; color: var(--yellow); }
+
+.ff-prediction-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 14px 24px;
+  border-top: 1px solid var(--border);
+  background: var(--bg3);
+}
+.ff-pred-label { font-size: 0.78rem; color: var(--text3); font-weight: 600; }
+.ff-pred-val { font-size: 0.9rem; font-weight: 800; }
+
+.ff-analysis {
+  padding: 14px 24px;
+  font-size: 0.85rem;
+  color: var(--text2);
+  line-height: 1.7;
+  border-top: 1px solid var(--border);
+}
+
+.ff-darkhorse {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 12px 24px;
+  font-size: 0.82rem;
+  color: var(--text2);
+  border-top: 1px solid var(--border);
+  background: var(--bg3);
+}
+.ff-darkhorse strong { color: var(--orange); }
+
+.pick-section-divider {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 20px 0 12px;
+  max-width: 820px;
+}
+.pick-section-label {
+  font-size: 0.78rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 1px;
+  color: var(--text3);
+}
+.pick-section-label i { color: var(--yellow); margin-right: 4px; }
+
+.ff-loading-wrap { max-width: 820px; }
+
 /* ── Responsive ──────────────────────────────────────────── */
 @media (max-width: 1100px) {
   .stat-grid { grid-template-columns: repeat(2, 1fr); }

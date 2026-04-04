@@ -272,6 +272,53 @@ def _get_demo_ev_bets() -> list[BetEvaluation]:
     ]
     return demo
 
+def _get_final_four_teams() -> list[str]:
+    """Try to fetch current Final Four teams from ESPN NCAAB scoreboard."""
+    try:
+        import requests
+        url = "https://site.api.espn.com/apis/site/v2/sports/basketball/mens-college-basketball/scoreboard"
+        r = requests.get(url, timeout=5)
+        if r.status_code != 200:
+            return []
+        data = r.json()
+        teams = []
+        for event in data.get("events", []):
+            notes = event.get("notes", [])
+            headline = " ".join([n.get("headline", "") for n in notes]).lower()
+            season_type = event.get("season", {}).get("type", 0)
+            if "final four" in headline or "semifinal" in headline or season_type == 3:
+                for comp in event.get("competitions", []):
+                    for competitor in comp.get("competitors", []):
+                        team_name = competitor.get("team", {}).get("displayName", "")
+                        if team_name and team_name not in teams:
+                            teams.append(team_name)
+        return teams[:4]
+    except Exception:
+        return []
+
+
+@app.get("/api/final-four/{bot}")
+async def get_final_four_ranking(bot: str):
+    """Get a bot's Final Four championship rankings for all 4 teams."""
+    from src.ai.multi_advisor import (
+        get_claude_final_four, get_chatgpt_final_four,
+        get_deepseek_final_four, get_gemini_final_four,
+    )
+    fn_map = {
+        "claude": get_claude_final_four,
+        "chatgpt": get_chatgpt_final_four,
+        "deepseek": get_deepseek_final_four,
+        "gemini": get_gemini_final_four,
+    }
+    fn = fn_map.get(bot.lower())
+    if not fn:
+        raise HTTPException(404, f"Unknown bot: {bot}")
+    teams = _get_final_four_teams()
+    loop = asyncio.get_event_loop()
+    result = await loop.run_in_executor(None, lambda: fn(teams))
+    return result
+
+
 @app.get("/api/ai-picks/{bot}")
 async def get_ai_pick_for_bot(bot: str):
     """Get a single bot's pick — call separately per bot so each resolves independently."""

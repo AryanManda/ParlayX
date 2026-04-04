@@ -202,6 +202,179 @@ def _error_response(bot: str, error: str) -> dict:
     }
 
 
+# ── Final Four Rankings ───────────────────────────────────────────────────────
+
+def _build_final_four_prompt(teams: list[str]) -> str:
+    if teams and len(teams) >= 2:
+        teams_str = ", ".join(teams)
+        intro = f"The NCAA Men's Basketball Final Four teams are: {teams_str}."
+    else:
+        intro = "Identify and analyze the current NCAA Men's Basketball Final Four teams (April 2026)."
+
+    return f"""{intro}
+
+Rank all 4 Final Four teams by their probability of winning the NCAA Championship.
+
+Respond in this EXACT JSON format (no markdown, no extra text, just raw JSON):
+{{
+  "rankings": [
+    {{
+      "rank": 1,
+      "team": "Team Name",
+      "win_prob": 42,
+      "seed": 1,
+      "region": "East",
+      "record": "30-5",
+      "key_strength": "One sentence about biggest advantage",
+      "key_risk": "One sentence about biggest risk"
+    }},
+    {{
+      "rank": 2,
+      "team": "Team Name",
+      "win_prob": 28,
+      "seed": 2,
+      "region": "South",
+      "record": "29-6",
+      "key_strength": "One sentence",
+      "key_risk": "One sentence"
+    }},
+    {{
+      "rank": 3,
+      "team": "Team Name",
+      "win_prob": 18,
+      "seed": 3,
+      "region": "West",
+      "record": "28-7",
+      "key_strength": "One sentence",
+      "key_risk": "One sentence"
+    }},
+    {{
+      "rank": 4,
+      "team": "Team Name",
+      "win_prob": 12,
+      "seed": 4,
+      "region": "Midwest",
+      "record": "27-8",
+      "key_strength": "One sentence",
+      "key_risk": "One sentence"
+    }}
+  ],
+  "analysis": "2-3 sentence overall championship analysis and prediction",
+  "dark_horse": "Team most likely to exceed expectations",
+  "championship_game": "Team A vs Team B"
+}}"""
+
+
+def _parse_ff_ranking(raw: str, bot_name: str) -> dict:
+    try:
+        start = raw.find("{")
+        end = raw.rfind("}") + 1
+        if start >= 0 and end > start:
+            data = json.loads(raw[start:end])
+            data["bot"] = bot_name
+            return data
+    except Exception:
+        pass
+    return _error_ff_response(bot_name, f"Could not parse response: {raw[:200]}")
+
+
+def _no_key_ff_response(bot: str) -> dict:
+    return {"bot": bot, "rankings": [], "analysis": f"API key not configured for {bot}.",
+            "dark_horse": "—", "championship_game": "—", "error": "Missing API key"}
+
+
+def _error_ff_response(bot: str, error: str) -> dict:
+    return {"bot": bot, "rankings": [], "analysis": f"Error: {error[:200]}",
+            "dark_horse": "—", "championship_game": "—", "error": error[:200]}
+
+
+def get_claude_final_four(teams: list[str]) -> dict:
+    if not ANTHROPIC_API_KEY:
+        return _no_key_ff_response("Claude")
+    try:
+        import anthropic
+        client = anthropic.Anthropic(api_key=ANTHROPIC_API_KEY, timeout=30.0)
+        msg = client.messages.create(
+            model="claude-haiku-4-5-20251001",
+            max_tokens=900,
+            messages=[{"role": "user", "content": _build_final_four_prompt(teams)}],
+        )
+        raw = msg.content[0].text if msg.content else ""
+        result = _parse_ff_ranking(raw, "Claude")
+        result["model"] = "claude-haiku-4-5-20251001"
+        return result
+    except Exception as e:
+        err = str(e)
+        if "credit" in err.lower() or "billing" in err.lower():
+            r = _no_key_ff_response("Claude")
+            r["analysis"] = "Your Anthropic account has no credits. Add credits at console.anthropic.com → Billing."
+            return r
+        return _error_ff_response("Claude", err)
+
+
+def get_chatgpt_final_four(teams: list[str]) -> dict:
+    if not OPENAI_API_KEY:
+        return _no_key_ff_response("ChatGPT")
+    try:
+        import openai
+        client = openai.OpenAI(api_key=OPENAI_API_KEY)
+        resp = client.chat.completions.create(
+            model="gpt-4o",
+            max_tokens=900,
+            messages=[
+                {"role": "system", "content": "You are an expert college basketball analyst. Always respond with valid JSON only."},
+                {"role": "user", "content": _build_final_four_prompt(teams)},
+            ],
+        )
+        raw = resp.choices[0].message.content if resp.choices else ""
+        result = _parse_ff_ranking(raw, "ChatGPT")
+        result["model"] = "gpt-4o"
+        return result
+    except Exception as e:
+        return _error_ff_response("ChatGPT", str(e))
+
+
+def get_deepseek_final_four(teams: list[str]) -> dict:
+    if not DEEPSEEK_API_KEY:
+        return _no_key_ff_response("DeepSeek")
+    try:
+        import openai
+        client = openai.OpenAI(api_key=DEEPSEEK_API_KEY, base_url="https://api.deepseek.com")
+        resp = client.chat.completions.create(
+            model="deepseek-chat",
+            max_tokens=900,
+            messages=[
+                {"role": "system", "content": "You are an expert college basketball analyst. Always respond with valid JSON only."},
+                {"role": "user", "content": _build_final_four_prompt(teams)},
+            ],
+        )
+        raw = resp.choices[0].message.content if resp.choices else ""
+        result = _parse_ff_ranking(raw, "DeepSeek")
+        result["model"] = "deepseek-chat"
+        return result
+    except Exception as e:
+        return _error_ff_response("DeepSeek", str(e))
+
+
+def get_gemini_final_four(teams: list[str]) -> dict:
+    if not GEMINI_API_KEY:
+        return _no_key_ff_response("Gemini")
+    try:
+        import google.generativeai as genai
+        genai.configure(api_key=GEMINI_API_KEY)
+        model = genai.GenerativeModel("gemini-1.5-flash")
+        resp = model.generate_content(
+            _build_final_four_prompt(teams),
+            generation_config={"max_output_tokens": 900},
+        )
+        raw = resp.text if hasattr(resp, "text") else ""
+        result = _parse_ff_ranking(raw, "Gemini")
+        result["model"] = "gemini-1.5-flash"
+        return result
+    except Exception as e:
+        return _error_ff_response("Gemini", str(e))
+
+
 def get_all_picks(bets: list[dict]) -> dict:
     """Run all 4 AI advisors in parallel threads and return their picks."""
     from concurrent.futures import ThreadPoolExecutor, as_completed

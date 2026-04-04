@@ -526,26 +526,32 @@ async function loadAiPicks() {
   const btn = document.getElementById('refreshPicksBtn');
   if (btn) { btn.disabled = true; btn.innerHTML = '<i class="fa fa-spinner fa-spin"></i> Loading...'; }
 
-  // Show spinner in active panel, "queued" in others immediately
-  const activeBot = document.querySelector('.bot-tab.active')?.dataset.bot || 'claude';
+  // Show loading skeleton in all panels immediately
   for (const bot of Object.keys(BOT_META)) {
     const panel = document.getElementById(`panel-${bot}`);
-    if (bot === activeBot) {
-      panel.innerHTML = `<div class="empty-state"><div class="spinner"></div><p>Asking ${BOT_META[bot].name}...</p></div>`;
-    } else {
-      panel.innerHTML = `<div class="empty-state"><p style="color:var(--text3)">Click tab to load ${BOT_META[bot].name}'s pick</p></div>`;
-    }
+    panel.innerHTML = `
+      <div class="ff-loading-wrap">
+        <div class="ff-section-header"><span class="ff-trophy">🏆</span> Final Four Rankings</div>
+        <div class="empty-state" style="padding:30px 0"><div class="spinner"></div><p>Loading rankings from ${BOT_META[bot].name}...</p></div>
+      </div>
+      <div id="pick-section-${bot}">
+        <div class="empty-state" style="padding:24px 0"><div class="spinner"></div><p>Fetching best pick...</p></div>
+      </div>`;
   }
 
-  // Load all 4 in parallel with 20s timeout each — always render something
+  // Load both rankings + picks in parallel for all 4 bots
   const promises = Object.keys(BOT_META).map(async bot => {
-    try {
-      const pick = await fetchWithTimeout(`/api/ai-picks/${bot}`, 20000);
-      renderPickCard(bot, pick);
-    } catch (e) {
-      const msg = e.name === 'AbortError' ? 'Request timed out' : e.message;
-      renderNoKeyCard(bot, msg);
-    }
+    const [ffResult, pickResult] = await Promise.allSettled([
+      fetchWithTimeout(`/api/final-four/${bot}`, 30000),
+      fetchWithTimeout(`/api/ai-picks/${bot}`, 25000),
+    ]);
+
+    const ffData = ffResult.status === 'fulfilled' ? ffResult.value
+      : { rankings: [], analysis: ffResult.reason?.message || 'Failed to load', error: true };
+    const pick = pickResult.status === 'fulfilled' ? pickResult.value
+      : { verdict: 'UNAVAILABLE', reasoning: pickResult.reason?.message || 'Failed to load', error: true };
+
+    renderBotPanel(bot, ffData, pick);
   });
 
   await Promise.allSettled(promises);
@@ -553,77 +559,126 @@ async function loadAiPicks() {
   if (btn) { btn.disabled = false; btn.innerHTML = '<i class="fa fa-sync"></i> Refresh All Picks'; }
 }
 
-function renderNoKeyCard(bot, customMsg) {
+function renderBotPanel(bot, ffData, pick) {
   const meta = BOT_META[bot];
-  const keyNames = {
-    claude: 'ANTHROPIC_API_KEY', chatgpt: 'OPENAI_API_KEY',
-    deepseek: 'DEEPSEEK_API_KEY', gemini: 'GEMINI_API_KEY',
-  };
-  const urls = {
-    claude: 'console.anthropic.com', chatgpt: 'platform.openai.com/api-keys',
-    deepseek: 'platform.deepseek.com', gemini: 'aistudio.google.com/app/apikey',
-  };
-  const panel = document.getElementById(`panel-${bot}`);
-  panel.innerHTML = `
-    <div class="pick-card ${meta.cls}" style="max-width:820px;opacity:0.75">
-      <div class="pick-hero" style="justify-content:center;text-align:center;flex-direction:column;gap:12px;padding:40px">
-        <div style="font-size:3rem">${meta.icon}</div>
-        <div style="font-size:1.4rem;font-weight:900;color:var(--text2)">${meta.name} not connected</div>
-        <div style="font-size:0.88rem;color:var(--text3);max-width:400px">
-          ${customMsg || `Add <code style="background:var(--bg4);padding:2px 6px;border-radius:4px">${keyNames[bot]}</code> to your .env file`}
-        </div>
-        <div style="font-size:0.8rem;color:var(--text3)">Get a key at <strong>${urls[bot]}</strong></div>
-      </div>
-    </div>`;
-}
-
-function renderPickCard(bot, pick) {
-  const meta = BOT_META[bot] || { name: bot, icon: '?', cls: '', color: 'var(--text2)' };
   const panel = document.getElementById(`panel-${bot}`);
   if (!panel) return;
 
-  // Show no-key card for unavailable/error states
-  if (pick.verdict === 'UNAVAILABLE' || pick.error) {
-    renderNoKeyCard(bot, pick.reasoning || pick.error || 'API key not configured');
-    return;
+  const ffHtml = renderFinalFourSection(bot, ffData);
+  const pickHtml = buildPickHtml(bot, pick);
+
+  panel.innerHTML = `
+    ${ffHtml}
+    <div class="pick-section-divider">
+      <span class="pick-section-label"><i class="fa fa-bolt"></i> ${meta.name}'s Best Bet Today</span>
+    </div>
+    ${pickHtml}`;
+}
+
+function renderFinalFourSection(bot, data) {
+  const meta = BOT_META[bot];
+  const colors = { claude:'#f97316', chatgpt:'#10b981', deepseek:'#3b82f6', gemini:'#a855f7' };
+  const color = colors[bot] || 'var(--blue)';
+
+  if (!data.rankings || data.rankings.length === 0) {
+    const msg = data.error
+      ? (data.analysis || 'Could not load rankings')
+      : 'No rankings available';
+    return `
+      <div class="ff-section">
+        <div class="ff-section-header"><span class="ff-trophy">🏆</span> Final Four Rankings
+          <span class="ff-model-tag" style="color:${color}">${meta.name}</span>
+        </div>
+        <div class="empty-state" style="padding:24px"><p style="color:var(--text3)">${msg}</p></div>
+      </div>`;
   }
 
+  const rankMedals = ['🥇','🥈','🥉','4️⃣'];
+  const rankRows = data.rankings.map((r, i) => {
+    const prob = Math.max(0, Math.min(100, r.win_prob || 0));
+    const barColor = i === 0 ? color : i === 1 ? 'var(--blue)' : i === 2 ? 'var(--yellow)' : 'var(--text3)';
+    return `
+      <div class="ff-rank-row rank-${i+1}">
+        <div class="ff-rank-medal">${rankMedals[i] || (i+1)}</div>
+        <div class="ff-rank-info">
+          <div class="ff-rank-top">
+            <span class="ff-team-name">${r.team || '—'}</span>
+            <span class="ff-meta-badges">
+              ${r.seed ? `<span class="ff-seed">#${r.seed} seed</span>` : ''}
+              ${r.region ? `<span class="ff-region">${r.region}</span>` : ''}
+              ${r.record ? `<span class="ff-record">${r.record}</span>` : ''}
+            </span>
+          </div>
+          <div class="ff-prob-row">
+            <div class="ff-prob-bar-bg">
+              <div class="ff-prob-bar" style="width:${prob}%;background:${barColor}"></div>
+            </div>
+            <span class="ff-prob-pct" style="color:${barColor}">${prob}%</span>
+          </div>
+          <div class="ff-strength-risk">
+            ${r.key_strength ? `<div class="ff-strength"><i class="fa fa-check-circle"></i> ${r.key_strength}</div>` : ''}
+            ${r.key_risk ? `<div class="ff-risk"><i class="fa fa-triangle-exclamation"></i> ${r.key_risk}</div>` : ''}
+          </div>
+        </div>
+      </div>`;
+  }).join('');
+
+  return `
+    <div class="ff-section">
+      <div class="ff-section-header">
+        <span class="ff-trophy">🏆</span> Final Four Rankings
+        <span class="ff-model-tag" style="color:${color}">${meta.name}</span>
+      </div>
+      <div class="ff-rankings">${rankRows}</div>
+      ${data.championship_game && data.championship_game !== '—' ? `
+      <div class="ff-prediction-row">
+        <span class="ff-pred-label">Predicted Championship:</span>
+        <span class="ff-pred-val" style="color:${color}">${data.championship_game}</span>
+      </div>` : ''}
+      ${data.analysis ? `<div class="ff-analysis">${data.analysis}</div>` : ''}
+      ${data.dark_horse && data.dark_horse !== '—' ? `
+      <div class="ff-darkhorse"><i class="fa fa-fire" style="color:var(--orange)"></i>
+        <span>Dark Horse: <strong>${data.dark_horse}</strong></span>
+      </div>` : ''}
+    </div>`;
+}
+
+function buildPickHtml(bot, pick) {
+  if (pick.verdict === 'UNAVAILABLE' || pick.error) {
+    return buildNoKeyHtml(bot, pick.reasoning || pick.error || 'API key not configured');
+  }
+
+  const meta = BOT_META[bot] || { name: bot, icon: '?', cls: '', color: 'var(--text2)' };
   const odds = pick.odds || 0;
   const oddsStr = odds > 0 ? `+${odds}` : `${odds}`;
   const oddsClass = odds > 0 ? 'pos' : 'neg';
   const verdictClass = `verdict-${pick.verdict || 'UNAVAILABLE'}`;
   const confClass = `conf-${pick.confidence || 'low'}`;
-  const isUnavailable = pick.verdict === 'UNAVAILABLE' || !pick.odds;
 
-  panel.innerHTML = `
+  return `
     <div class="pick-card ${meta.cls}">
       <div class="pick-hero">
         <div class="pick-hero-left">
-          <span class="pick-bot-name" style="color:${meta.cls ? '' : meta.color}">
-            ${meta.icon} ${meta.name}'s Pick
-          </span>
+          <span class="pick-bot-name">${meta.icon} ${meta.name}'s Pick</span>
           <div class="pick-name">${pick.pick || '—'}</div>
           <div class="pick-teams">${pick.teams || '—'} ${pick.sport && pick.sport !== '—' ? '· <span class="sport-badge sport-' + pick.sport + '">' + pick.sport + '</span>' : ''}</div>
         </div>
         <div class="pick-hero-right">
-          ${!isUnavailable ? `<div class="pick-odds ${oddsClass}">${oddsStr}</div>` : ''}
+          ${odds ? `<div class="pick-odds ${oddsClass}">${oddsStr}</div>` : ''}
           <span class="pick-verdict ${verdictClass}">${pick.verdict || 'UNAVAILABLE'}</span>
         </div>
       </div>
-
       <div class="pick-body">
         ${pick.key_edge && pick.key_edge !== '—' ? `
         <div class="pick-edge-box">
           <div class="pick-edge-label">Core Edge</div>
           <div class="pick-edge-text">${pick.key_edge}</div>
         </div>` : ''}
-
         <div>
           <div class="pick-reasoning-label">Analysis</div>
           <div class="pick-reasoning">${pick.reasoning || 'No analysis available.'}</div>
         </div>
       </div>
-
       <div class="pick-footer">
         <div class="pick-conf">
           <span class="pick-conf-label">Confidence:</span>
@@ -635,6 +690,24 @@ function renderPickCard(bot, pick) {
       </div>
     </div>`;
 }
+
+function buildNoKeyHtml(bot, customMsg) {
+  const meta = BOT_META[bot];
+  const keyNames = { claude:'ANTHROPIC_API_KEY', chatgpt:'OPENAI_API_KEY', deepseek:'DEEPSEEK_API_KEY', gemini:'GEMINI_API_KEY' };
+  const urls = { claude:'console.anthropic.com', chatgpt:'platform.openai.com/api-keys', deepseek:'platform.deepseek.com', gemini:'aistudio.google.com/app/apikey' };
+  return `
+    <div class="pick-card ${meta.cls}" style="opacity:0.75">
+      <div class="pick-hero" style="justify-content:center;text-align:center;flex-direction:column;gap:12px;padding:32px">
+        <div style="font-size:2.5rem">${meta.icon}</div>
+        <div style="font-size:1.2rem;font-weight:900;color:var(--text2)">${meta.name} not connected</div>
+        <div style="font-size:0.85rem;color:var(--text3);max-width:400px">
+          ${customMsg || `Add <code style="background:var(--bg4);padding:2px 6px;border-radius:4px">${keyNames[bot]}</code> to your .env file`}
+        </div>
+        <div style="font-size:0.78rem;color:var(--text3)">Get a key at <strong>${urls[bot]}</strong></div>
+      </div>
+    </div>`;
+}
+
 
 // ── Init ───────────────────────────────────────────────────────────────────
 (async function init() {
