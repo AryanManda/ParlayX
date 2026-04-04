@@ -123,6 +123,16 @@ PLACEHOLDER_GAMES = {
         ("Tampa Bay Lightning", "Florida Panthers"),
         ("Vegas Golden Knights", "Edmonton Oilers"),
     ],
+    "NCAAB": [
+        ("Duke Blue Devils", "North Carolina Tar Heels"),
+        ("Kansas Jayhawks", "Kentucky Wildcats"),
+        ("Gonzaga Bulldogs", "Arizona Wildcats"),
+        ("Houston Cougars", "Tennessee Volunteers"),
+        ("Auburn Tigers", "Alabama Crimson Tide"),
+        ("Michigan State Spartans", "Illinois Fighting Illini"),
+        ("Michigan Wolverines", "Purdue Boilermakers"),
+        ("Connecticut Huskies", "Villanova Wildcats"),
+    ],
 }
 
 

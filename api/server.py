@@ -41,7 +41,7 @@ _state = {
 # ── Pydantic models ────────────────────────────────────────────────────────────
 
 class ScanRequest(BaseModel):
-    sports: list[str] = ["NBA", "NFL", "MLB", "NHL"]
+    sports: list[str] = ["NBA", "NFL", "MLB", "NHL", "NCAAB"]
     bankroll: float = 1000.0
     legs: int = 3
     ai_analysis: bool = True

@@ -25,7 +25,7 @@ def _build_prompt(bets: list[dict]) -> str:
     prompt = "\n".join(lines)
     prompt += """
 
-You are an expert sports bettor. Based on the bets above, select your SINGLE best pick for today.
+You are an expert sports bettor covering NBA, NFL, MLB, NHL, and College Basketball (NCAAB). Based on the bets above, select your SINGLE best pick for today.
 
 Respond in this exact JSON format (no markdown, just raw JSON):
 {
